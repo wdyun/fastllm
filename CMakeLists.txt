@@ -693,6 +693,10 @@ if (UNIT_TEST)
     target_link_libraries(qwen4_mtp_weights_test PRIVATE fastllm)
     add_test(NAME qwen4_mtp_weights COMMAND qwen4_mtp_weights_test)
 
+    add_executable(qwen35_dflash_quant_map_test test/basic/test_qwen35_dflash_quant_map.cpp)
+    target_link_libraries(qwen35_dflash_quant_map_test PRIVATE fastllm)
+    add_test(NAME qwen35_dflash_quant_map COMMAND qwen35_dflash_quant_map_test)
+
     add_executable(qwen35_paged_cache_test test/basic/test_qwen35_paged_cache.cpp)
     add_test(NAME qwen35_paged_cache COMMAND qwen35_paged_cache_test)
 
