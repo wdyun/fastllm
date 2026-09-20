@@ -8969,8 +8969,16 @@ namespace fastllm {
         for (const std::string &name : tensorNames) {
             if (dflashEnabled) {
                 const std::string mapped = "dflash." + name;
+                // Quantized drafts keep their source FP8/NVFP4 layout. The
+                // loader resolves DATA_AUTO_SOURCE per tensor from the
+                // safetensors dtype, so an unquantized sibling such as the FP8
+                // draft's bf16 q/k/v still loads as a floating-point weight.
+                const DataType draftLinearMapType =
+                    dflashQuantizedLinearWeights
+                        ? DataType::DATA_AUTO_SOURCE
+                        : DataType::BFLOAT16;
                 if (draftRootLinears.find(name) != draftRootLinears.end()) {
-                    result[name].push_back({mapped, DataType::BFLOAT16});
+                    result[name].push_back({mapped, draftLinearMapType});
                     continue;
                 }
                 if (draftRootNorms.find(name) != draftRootNorms.end()) {
@@ -8992,7 +9000,7 @@ namespace fastllm {
                     const std::string suffix = name.substr(prefix.size());
                     if (draftLayerLinears.find(suffix) !=
                         draftLayerLinears.end()) {
-                        result[name].push_back({mapped, DataType::BFLOAT16});
+                        result[name].push_back({mapped, draftLinearMapType});
                         matched = true;
                     } else if (draftLayerNorms.find(suffix) !=
                                draftLayerNorms.end()) {
@@ -24303,7 +24311,40 @@ namespace fastllm {
         }
         mtp_num_hidden_layers = atoi(getDictValue("mtp_num_hidden_layers", "0").c_str());
         dflashEnabled = !getDictValue("dflash.model_path", "").empty();
+        // A quantized draft must keep its source quantization instead of the
+        // unconditional BF16 mapping used for the floating-point draft. Without
+        // this, the FP8 draft matrices are dequantized without their scale.
+        // The fused merge rules stay enabled because per-tensor FP8 and inline
+        // NVFP4 block scales concatenate consistently along the output rows.
+        dflashQuantizedLinearWeights = false;
         if (dflashEnabled) {
+            const std::string dflashQuantMethod = getDictValue(
+                "dflash.quantization_config.quant_method", "");
+            const std::string dflashQuantAlgo = getDictValue(
+                "dflash.quantization_config.quant_algo", "");
+            if (dflashQuantMethod == "modelopt" &&
+                dflashQuantAlgo == "NVFP4") {
+                dflashQuantizedLinearWeights = true;
+            } else if (dflashQuantMethod == "compressed-tensors") {
+                const std::string weightBits = getDictValue(
+                    "dflash.quantization_config.config_groups.group_0.weights.num_bits",
+                    "");
+                const std::string weightType = getDictValue(
+                    "dflash.quantization_config.config_groups.group_0.weights.type",
+                    "");
+                if (weightBits == "8" && weightType == "float") {
+                    dflashQuantizedLinearWeights = true;
+                }
+            }
+            if (dflashQuantizedLinearWeights) {
+                std::printf(
+                    "[Qwen3.5 DFlash2] quantized draft detected (%s%s%s); "
+                    "loading linear weights in their source quantization.\n",
+                    dflashQuantMethod.c_str(),
+                    dflashQuantAlgo.empty() ? "" : "/",
+                    dflashQuantAlgo.c_str());
+                std::fflush(stdout);
+            }
             auto requireDflashInt = [&](const std::string &key) {
                 const std::string value = getDictValue("dflash." + key, "");
                 AssertInFastLLM(!value.empty(),

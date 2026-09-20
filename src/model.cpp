@@ -4757,7 +4757,8 @@ namespace fastllm {
 
         auto canApplyDtypeRule = [&](const std::string &weightName,
                                      DataType dataType) {
-            if (dataType == DATA_AUTO_LINEAR || dataType == DATA_AUTO_CONV) {
+            if (dataType == DATA_AUTO_LINEAR || dataType == DATA_AUTO_CONV ||
+                dataType == DATA_AUTO_SOURCE) {
                 return true;
             }
             // Qwen3.5 maps external DFlash matrices to BF16 explicitly so

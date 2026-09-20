@@ -397,6 +397,7 @@ namespace fastllm {
         PersistentWorkerGroup threadTpWorkerGroup;
 
         bool dflashEnabled = false;
+        bool dflashQuantizedLinearWeights = false;
         bool dflashWeightsPrepared = false;
         int dflashWeightsPreparedDevice = -1;
         bool dflashTpBackboneDecisionMade = false;
